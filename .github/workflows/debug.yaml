@@ -31,5 +31,6 @@ jobs:
           # platforms: linux/amd64,linux/arm64
           platforms: linux/amd64
           profile-name: test-dev,dev-eph
+          timeout: 40000
 
 
