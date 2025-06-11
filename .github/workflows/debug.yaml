@@ -30,7 +30,7 @@ jobs:
           push: false
           # platforms: linux/amd64,linux/arm64
           platforms: linux/amd64
-          profile-name: test-dev,dev-eph
+          profile-name: prod-ephemeral
           timeout: 40000
 
 
