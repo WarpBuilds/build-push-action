@@ -6,13 +6,13 @@ on:
       - feat/teardown_post_hook
   workflow_dispatch:
 
-env:
-  WARPBUILD_API_DOMAIN: "https://api.dev.warpbuild.dev"
+# env:
+#   WARPBUILD_API_DOMAIN: "https://api.dev.warpbuild.dev"
 
 jobs:
   test-multi-warp:
     name: Debug Run ${{ matrix.run_number }}
-    runs-on: warpdev-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-2x
     strategy:
       matrix:
         run_number: [1]
