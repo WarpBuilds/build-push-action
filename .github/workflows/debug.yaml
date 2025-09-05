@@ -3,7 +3,7 @@ name: Debug WarpBuild Docker Configure Action
 on:
   push:
     branches:
-      - feat/teardown_post_hook
+      - debug-local-image
   workflow_dispatch:
 
 env:
@@ -31,5 +31,9 @@ jobs:
           # platforms: linux/amd64,linux/arm64
           platforms: linux/amd64
           profile-name: test-dev
+
+      - name: Test
+        run: |
+          docker images && docker run --rm test-image-run-${{ matrix.run_number }}
 
 
