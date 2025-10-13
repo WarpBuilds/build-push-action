@@ -28,8 +28,8 @@ actionsToolkit.run(
   async () => {
     const startedTime = new Date();
     const inputs: context.Inputs = await context.getInputs();
+    stateHelper.setSummaryInputs(inputs);
     core.debug(`inputs: ${JSON.stringify(inputs)}`);
-    stateHelper.setInputs(inputs);
 
     const toolkit = new Toolkit();
     const parsedTimeout = parseInt(inputs.timeout);
@@ -102,6 +102,8 @@ actionsToolkit.run(
     let builder: BuilderInfo;
     await core.group(`Builder info`, async () => {
       builder = await toolkit.builder.inspect(inputs.builder);
+      stateHelper.setBuilderDriver(builder.driver ?? '');
+      stateHelper.setBuilderEndpoint(builder.nodes?.[0]?.endpoint ?? '');
       core.info(JSON.stringify(builder, null, 2));
     });
 
@@ -125,9 +127,9 @@ actionsToolkit.run(
         if (inputs.call && inputs.call === 'check' && res.stdout.length > 0) {
           // checks warnings are printed to stdout: https://github.com/docker/buildx/pull/2647
           // take the first line with the message summaryzing the warnings
-          err = Error(res.stdout.split('\n')[0]?.trim());
+          err = new Error(res.stdout.split('\n')[0]?.trim());
         } else if (res.stderr.length > 0) {
-          err = Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
+          err = new Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
         }
       }
     });
@@ -190,8 +192,6 @@ actionsToolkit.run(
         core.info('Build summary is not yet supported on GHES');
       } else if (!(await toolkit.buildx.versionSatisfies('>=0.13.0'))) {
         core.info('Build summary requires Buildx >= 0.13.0');
-      } else if (builder && builder.driver === 'cloud') {
-        core.info('Build summary is not yet supported with Docker Build Cloud');
       } else if (!ref) {
         core.info('Build summary requires a build reference');
       } else {
@@ -221,7 +221,8 @@ actionsToolkit.run(
 
           const buildxHistory = new BuildxHistory();
           const exportRes = await buildxHistory.export({
-            refs: stateHelper.buildRef ? [stateHelper.buildRef] : []
+            refs: stateHelper.buildRef ? [stateHelper.buildRef] : [],
+            useContainer: buildExportLegacy()
           });
           core.info(`Build record written to ${exportRes.dockerbuildFilename} (${Util.formatFileSize(exportRes.dockerbuildSize)})`);
 
@@ -237,7 +238,9 @@ actionsToolkit.run(
           await GitHub.writeBuildSummary({
             exportRes: exportRes,
             uploadRes: uploadRes,
-            inputs: stateHelper.inputs
+            inputs: stateHelper.summaryInputs,
+            driver: stateHelper.builderDriver,
+            endpoint: stateHelper.builderEndpoint
           });
         } catch (e) {
           core.warning(e.message);
@@ -246,7 +249,11 @@ actionsToolkit.run(
     }
     if (stateHelper.tmpDir.length > 0) {
       await core.group(`Removing temp folder ${stateHelper.tmpDir}`, async () => {
-        fs.rmSync(stateHelper.tmpDir, {recursive: true});
+        try {
+          fs.rmSync(stateHelper.tmpDir, {recursive: true});
+        } catch (e) {
+          core.warning(`Failed to remove temp folder ${stateHelper.tmpDir}`);
+        }
       });
     }
 
@@ -323,8 +330,15 @@ function buildRecordRetentionDays(): number | undefined {
   if (val) {
     const res = parseInt(val);
     if (isNaN(res)) {
-      throw Error(`Invalid build record retention days: ${val}`);
+      throw new Error(`Invalid build record retention days: ${val}`);
     }
     return res;
   }
+}
+
+function buildExportLegacy(): boolean {
+  if (process.env.DOCKER_BUILD_EXPORT_LEGACY) {
+    return Util.parseBool(process.env.DOCKER_BUILD_EXPORT_LEGACY);
+  }
+  return false;
 }
