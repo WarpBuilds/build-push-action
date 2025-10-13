@@ -27,9 +27,9 @@ on:
         type: string
 
 env:
-  HARBOR_VERSION: v2.7.0
+  HARBOR_VERSION: v2.13.2
   NEXUS_VERSION: 3.47.1
-  DISTRIBUTION_VERSION: 2.8.1
+  DISTRIBUTION_VERSION: 3.0.0
 
 jobs:
   run:
@@ -50,7 +50,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       -
         name: Set up env
         if: inputs.type == 'local'

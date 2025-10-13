@@ -125,7 +125,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       -
         name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -157,6 +157,7 @@ jobs:
 * [Cache management](https://docs.docker.com/build/ci/github-actions/cache/)
 * [Export to Docker](https://docs.docker.com/build/ci/github-actions/export-docker/)
 * [Test before push](https://docs.docker.com/build/ci/github-actions/test-before-push/)
+* [Validating build configuration](https://docs.docker.com/build/ci/github-actions/checks/)
 * [Local registry](https://docs.docker.com/build/ci/github-actions/local-registry/)
 * [Share built image between jobs](https://docs.docker.com/build/ci/github-actions/share-image-jobs/)
 * [Named contexts](https://docs.docker.com/build/ci/github-actions/named-contexts/)
@@ -242,6 +243,7 @@ The following outputs are available:
 | `DOCKER_BUILD_SUMMARY`               | Bool   | `true`  | If `false`, [build summary](https://docs.docker.com/build/ci/github-actions/build-summary/) generation is disabled                                                                                                                                                 |
 | `DOCKER_BUILD_RECORD_UPLOAD`         | Bool   | `true`  | If `false`, build record upload as [GitHub artifact](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts) is disabled                                                                                                            |
 | `DOCKER_BUILD_RECORD_RETENTION_DAYS` | Number |         | Duration after which build record artifact will expire in days. Defaults to repository/org [retention settings](https://docs.github.com/en/actions/learn-github-actions/usage-limits-billing-and-administration#artifact-and-log-retention-policy) if unset or `0` |
+| `DOCKER_BUILD_EXPORT_LEGACY`         | Bool   | `false` | If `true`, exports build using legacy export-build tool instead of [`buildx history export` command](https://docs.docker.com/reference/cli/docker/buildx/history/export/)                                                                                          |
 
 ## Troubleshooting
 
