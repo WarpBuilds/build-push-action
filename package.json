@@ -44,5 +44,14 @@
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
+  },
+  "resolutions": {
+    "undici": "^6.24.0",
+    "minimatch": "^9.0.7",
+    "fast-xml-parser": "^5.5.7",
+    "tar": "^7.0.0",
+    "lodash": "^4.17.22",
+    "flatted": "^3.3.4",
+    "@isaacs/brace-expansion": "^3.0.1"
   }
 }
