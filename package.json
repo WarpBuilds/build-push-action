@@ -47,7 +47,6 @@
   },
   "resolutions": {
     "undici": "^6.24.0",
-    "minimatch": "^9.0.7",
     "fast-xml-parser": "^5.7.2",
     "tar": "^7.0.0",
     "lodash": "^4.18.1",
