@@ -24,10 +24,15 @@ jobs:
           persist-credentials: false
 
       - name: Build
+        id: build
         uses: ./
         with:
           context: __tests__
           file: __tests__/warp-e2e.Dockerfile
+          build-args: |
+            MARKER=warp-e2e
+          labels: |
+            com.warpbuild.e2e=true
           profile-name: super-fast-builder
           outputs: type=cacheonly
 
@@ -41,3 +46,35 @@ jobs:
             || { echo "expected the remote driver; the build did not use WarpBuild"; exit 1; }
           grep -qE 'tcp://' /tmp/builder.txt \
             || { echo "expected a tcp:// endpoint on the builder node"; exit 1; }
+
+      # Builder profiles cache layers automatically, so an identical rebuild
+      # must reuse them and produce the same digest.
+      - name: Rebuild the same image
+        id: rebuild
+        uses: ./
+        with:
+          context: __tests__
+          file: __tests__/warp-e2e.Dockerfile
+          build-args: |
+            MARKER=warp-e2e
+          labels: |
+            com.warpbuild.e2e=true
+          profile-name: super-fast-builder
+          outputs: type=cacheonly
+
+      - name: Assert layer reuse produced an identical digest
+        shell: bash
+        env:
+          FIRST: ${{ steps.build.outputs.digest }}
+          SECOND: ${{ steps.rebuild.outputs.digest }}
+        run: |
+          echo "first:  $FIRST"
+          echo "second: $SECOND"
+          if [ -z "$FIRST" ]; then
+            echo "the action produced no digest output"
+            exit 1
+          fi
+          if [ "$FIRST" != "$SECOND" ]; then
+            echo "identical rebuild produced a different digest; layers were not reused"
+            exit 1
+          fi

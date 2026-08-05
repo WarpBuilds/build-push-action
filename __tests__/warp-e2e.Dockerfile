@@ -1,3 +1,4 @@
 FROM alpine:3.22
-RUN echo "warp-e2e" > /ok.txt
+ARG MARKER=unset
+RUN echo "$MARKER" > /ok.txt
 CMD ["cat", "/ok.txt"]
