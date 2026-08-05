@@ -38,4 +38,3 @@ jobs:
           tags: test-image-run-${{ matrix.run_number }}
           push: false
           platforms: linux/amd64
-          profile-name: ${{ steps.pool.outputs.profile }}
