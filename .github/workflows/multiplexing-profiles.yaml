@@ -30,7 +30,7 @@ jobs:
           echo "profile=${POOL[$IDX]}" >> "$GITHUB_OUTPUT"
           echo "Routing to ${POOL[$IDX]} (key=$KEY, hash=$HASH, idx=$IDX)"
           
-      - uses: WarpBuilds/build-push-action@v2
+      - uses: WarpBuilds/build-push-action@v6
         with:
           profile-name: ${{ steps.pool.outputs.profile }}
           context: .
