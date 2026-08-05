@@ -34,7 +34,7 @@ jobs:
           labels: |
             com.warpbuild.e2e=true
           profile-name: super-fast-builder
-          outputs: type=cacheonly
+          load: true
 
       - name: Assert the build ran on a remote builder, not a local one
         shell: bash
@@ -60,21 +60,23 @@ jobs:
           labels: |
             com.warpbuild.e2e=true
           profile-name: super-fast-builder
-          outputs: type=cacheonly
+          load: true
 
-      - name: Assert layer reuse produced an identical digest
+      - name: Assert layer reuse produced an identical image
         shell: bash
         env:
-          FIRST: ${{ steps.build.outputs.digest }}
-          SECOND: ${{ steps.rebuild.outputs.digest }}
+          FIRST: ${{ steps.build.outputs.imageid }}
+          SECOND: ${{ steps.rebuild.outputs.imageid }}
+          FIRST_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          echo "first:  $FIRST"
-          echo "second: $SECOND"
+          echo "imageid first:  $FIRST"
+          echo "imageid second: $SECOND"
+          echo "digest:         $FIRST_DIGEST"
           if [ -z "$FIRST" ]; then
-            echo "the action produced no digest output"
+            echo "the action produced no imageid output"
             exit 1
           fi
           if [ "$FIRST" != "$SECOND" ]; then
-            echo "identical rebuild produced a different digest; layers were not reused"
+            echo "identical rebuild produced a different image; layers were not reused"
             exit 1
           fi
