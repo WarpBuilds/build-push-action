@@ -1,70 +1,119 @@
-import {afterEach, beforeEach, describe, expect, jest, test} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
-import {Builder} from '@docker/actions-toolkit/lib/buildx/builder';
-import {Buildx} from '@docker/actions-toolkit/lib/buildx/buildx';
-import {Build} from '@docker/actions-toolkit/lib/buildx/build';
-import {Context} from '@docker/actions-toolkit/lib/context';
-import {Docker} from '@docker/actions-toolkit/lib/docker/docker';
-import {GitHub} from '@docker/actions-toolkit/lib/github';
-import {Toolkit} from '@docker/actions-toolkit/lib/toolkit';
+import {Builder} from '@docker/actions-toolkit/lib/buildx/builder.js';
+import {Buildx} from '@docker/actions-toolkit/lib/buildx/buildx.js';
+import {Build} from '@docker/actions-toolkit/lib/buildx/build.js';
+import {Context} from '@docker/actions-toolkit/lib/context.js';
+import {Docker} from '@docker/actions-toolkit/lib/docker/docker.js';
+import {Toolkit} from '@docker/actions-toolkit/lib/toolkit.js';
 
-import {BuilderInfo} from '@docker/actions-toolkit/lib/types/buildx/builder';
-import {GitHubRepo} from '@docker/actions-toolkit/lib/types/github';
+import {BuilderInfo} from '@docker/actions-toolkit/lib/types/buildx/builder.js';
 
-import * as context from '../src/context';
+const tmpDir = fs.mkdtempSync(path.join(process.env.TEMP || os.tmpdir(), 'context-'));
+const tmpName = path.join(tmpDir, '.tmpname-vi');
+const fixturesDir = path.join(__dirname, 'fixtures');
 
-const tmpDir = path.join('/tmp', '.docker-build-push-jest');
-const tmpName = path.join(tmpDir, '.tmpname-jest');
-
-import repoFixture from './fixtures/github-repo.json';
-jest.spyOn(GitHub.prototype, 'repoData').mockImplementation((): Promise<GitHubRepo> => {
-  return <Promise<GitHubRepo>>(repoFixture as unknown);
-});
-
-jest.spyOn(Context, 'tmpDir').mockImplementation((): string => {
+vi.spyOn(Context, 'tmpDir').mockImplementation((): string => {
   if (!fs.existsSync(tmpDir)) {
     fs.mkdirSync(tmpDir, {recursive: true});
   }
   return tmpDir;
 });
 
-jest.spyOn(Context, 'tmpName').mockImplementation((): string => {
+vi.spyOn(Context, 'tmpName').mockImplementation((): string => {
   return tmpName;
 });
 
-jest.spyOn(Docker, 'isAvailable').mockImplementation(async (): Promise<boolean> => {
+vi.spyOn(Docker, 'isAvailable').mockImplementation(async (): Promise<boolean> => {
   return true;
 });
 
 const metadataJson = path.join(tmpDir, 'metadata.json');
-jest.spyOn(Build.prototype, 'getMetadataFilePath').mockImplementation((): string => {
+vi.spyOn(Build.prototype, 'getMetadataFilePath').mockImplementation((): string => {
   return metadataJson;
 });
 
 const imageIDFilePath = path.join(tmpDir, 'iidfile.txt');
-jest.spyOn(Build.prototype, 'getImageIDFilePath').mockImplementation((): string => {
+vi.spyOn(Build.prototype, 'getImageIDFilePath').mockImplementation((): string => {
   return imageIDFilePath;
 });
 
-jest.spyOn(Builder.prototype, 'inspect').mockImplementation(async (): Promise<BuilderInfo> => {
+type BuilderInfoFixture = Omit<BuilderInfo, 'lastActivity'> & {lastActivity: string};
+const builderInfoFixture = <BuilderInfoFixture>JSON.parse(fs.readFileSync(path.join(fixturesDir, 'builder-info.json'), {encoding: 'utf-8'}).trim());
+vi.spyOn(Builder.prototype, 'inspect').mockImplementation(async (): Promise<BuilderInfo> => {
   return {
-    name: 'builder2',
-    driver: 'docker-container',
-    lastActivity: new Date('2023-01-16 09:45:23 +0000 UTC'),
-    nodes: [
-      {
-        buildkit: 'v0.11.0',
-        'buildkitd-flags': '--debug --allow-insecure-entitlement security.insecure --allow-insecure-entitlement network.host',
-        'driver-opts': ['BUILDKIT_STEP_LOG_MAX_SIZE=10485760', 'BUILDKIT_STEP_LOG_MAX_SPEED=10485760', 'JAEGER_TRACE=localhost:6831', 'image=moby/buildkit:latest', 'network=host'],
-        endpoint: 'unix:///var/run/docker.sock',
-        name: 'builder20',
-        platforms: 'linux/amd64,linux/amd64/v2,linux/amd64/v3,linux/arm64,linux/riscv64,linux/ppc64le,linux/s390x,linux/386,linux/mips64le,linux/mips64,linux/arm/v7,linux/arm/v6',
-        status: 'running'
-      }
-    ]
+    ...builderInfoFixture,
+    lastActivity: new Date(builderInfoFixture.lastActivity)
   };
+});
+
+describe('getInputs', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = Object.keys(process.env).reduce((object, key) => {
+      if (!key.startsWith('INPUT_')) {
+        object[key] = process.env[key];
+      }
+      return object;
+    }, {});
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  function setRequiredBooleanInputs(): void {
+    setInput('load', 'false');
+    setInput('no-cache', 'false');
+    setInput('push', 'false');
+    setInput('pull', 'false');
+  }
+
+  test('uses Build git context when context input is empty', async () => {
+    const gitContext = 'https://github.com/docker/build-push-action.git?ref=refs/heads/master';
+    const gitContextSpy = vi.spyOn(Build.prototype, 'gitContext').mockResolvedValue(gitContext);
+    setRequiredBooleanInputs();
+    const context = await loadContextModule();
+    const inputs = await context.getInputs();
+    expect(inputs.context).toBe(gitContext);
+    expect(gitContextSpy).toHaveBeenCalledTimes(1);
+    gitContextSpy.mockRestore();
+  });
+
+  test('renders defaultContext templates from Build git context', async () => {
+    const gitContext = 'https://github.com/docker/build-push-action.git#refs/heads/master';
+    const gitContextSpy = vi.spyOn(Build.prototype, 'gitContext').mockResolvedValue(gitContext);
+    setRequiredBooleanInputs();
+    setInput('context', '{{defaultContext}}:subdir');
+    const context = await loadContextModule();
+    const inputs = await context.getInputs();
+    expect(inputs.context).toBe(`${gitContext}:subdir`);
+    expect(gitContextSpy).toHaveBeenCalledTimes(1);
+    gitContextSpy.mockRestore();
+  });
+
+  test('requests untrimmed secrets input explicitly', async () => {
+    const gitContext = 'https://github.com/docker/build-push-action.git#refs/heads/master';
+    const gitContextSpy = vi.spyOn(Build.prototype, 'gitContext').mockResolvedValue(gitContext);
+    const getInputList = vi.fn().mockReturnValue([]);
+    vi.resetModules();
+    vi.doMock('@docker/actions-toolkit/lib/util.js', () => ({
+      Util: {
+        getInputList
+      }
+    }));
+    setRequiredBooleanInputs();
+    setInput('secrets', `"PRIVATE_SSH_KEY=test\n\n"`);
+    const context = await import('../src/context.js');
+    await context.getInputs();
+    expect(getInputList).toHaveBeenCalledWith('secrets', {ignoreComma: true, trimWhitespace: false});
+    vi.doUnmock('@docker/actions-toolkit/lib/util.js');
+    gitContextSpy.mockRestore();
+  });
 });
 
 describe('getArgs', () => {
@@ -232,7 +281,7 @@ ccc"`],
       [
         'build',
         '--output', '.',
-        '--secret', `id=GIT_AUTH_TOKEN,src=${tmpName}`,
+        '--secret', `id=GIT_AUTH_TOKEN.github.com,src=${tmpName}`,
         'https://github.com/docker/build-push-action.git#refs/heads/master'
       ],
       undefined
@@ -346,7 +395,7 @@ ccc`],
       new Map<string, string>([
         ['context', 'https://github.com/docker/build-push-action.git#refs/heads/master'],
         ['tag', 'localhost:5000/name/app:latest'],
-        ['secret-files', `MY_SECRET=${path.join(__dirname, 'fixtures', 'secret.txt')}`],
+        ['secret-files', `MY_SECRET=${path.join(fixturesDir, 'secret.txt')}`],
         ['file', './test/Dockerfile'],
         ['builder', 'builder-git-context-2'],
         ['network', 'host'],
@@ -359,7 +408,7 @@ ccc`],
         'build',
         '--file', './test/Dockerfile',
         '--iidfile', imageIDFilePath,
-        '--secret', `id=MY_SECRET,src=${tmpName}`,
+        '--secret', `id=MY_SECRET,src=${path.join(fixturesDir, 'secret.txt')}`,
         '--builder', 'builder-git-context-2',
         '--network', 'host',
         '--push',
@@ -478,7 +527,7 @@ nproc=3`],
       [
         'build',
         '--iidfile', imageIDFilePath,
-        '--secret', `id=GIT_AUTH_TOKEN,src=${tmpName}`,
+        '--secret', `id=GIT_AUTH_TOKEN.github.com,src=${tmpName}`,
         '--metadata-file', metadataJson,
         'https://github.com/docker/build-push-action.git#refs/heads/master:subdir'
       ],
@@ -857,8 +906,94 @@ ANOTHER_SECRET=ANOTHER_SECRET_ENV`]
         ['BUILDX_NO_DEFAULT_ATTESTATIONS', '1']
       ])
     ],
+    [
+      35,
+      '0.13.1',
+      new Map<string, string>([
+        ['github-token', 'abcdefghijklmno0123456789'],
+        ['context', '{{defaultContext}}'],
+        ['load', 'false'],
+        ['no-cache', 'false'],
+        ['push', 'false'],
+        ['pull', 'false'],
+      ]),
+      [
+        'build',
+        '--iidfile', imageIDFilePath,
+        '--attest', `type=provenance,mode=min,inline-only=true,builder-id=http://10.0.0.5:22827/docker/build-push-action/actions/runs/123456789/attempts/1`,
+        '--secret', `id=GIT_AUTH_TOKEN.10.0.0.5:22827,src=${tmpName}`,
+        '--metadata-file', metadataJson,
+        'http://10.0.0.5:22827/docker/build-push-action.git#refs/heads/master'
+      ],
+      new Map<string, string>([
+        ['GITHUB_SERVER_URL', 'http://10.0.0.5:22827'],
+      ])
+    ],
+    [
+      36,
+      '0.13.1',
+      new Map<string, string>([
+        ['github-token', 'abcdefghijklmno0123456789'],
+        ['context', '{{defaultContext}}'],
+        ['load', 'false'],
+        ['no-cache', 'false'],
+        ['push', 'false'],
+        ['pull', 'false'],
+      ]),
+      [
+        'build',
+        '--iidfile', imageIDFilePath,
+        '--attest', `type=provenance,mode=min,inline-only=true,builder-id=https://github.cds.internal.unity3d.com/docker/build-push-action/actions/runs/123456789/attempts/1`,
+        '--secret', `id=GIT_AUTH_TOKEN.github.cds.internal.unity3d.com,src=${tmpName}`,
+        '--metadata-file', metadataJson,
+        'https://github.cds.internal.unity3d.com/docker/build-push-action.git#refs/heads/master'
+      ],
+      new Map<string, string>([
+        ['GITHUB_SERVER_URL', 'https://github.cds.internal.unity3d.com'],
+      ])
+    ],
+    [
+      37,
+      '0.29.0',
+      new Map<string, string>([
+        ['load', 'false'],
+        ['no-cache', 'false'],
+        ['push', 'false'],
+        ['pull', 'false'],
+      ]),
+      [
+        'build',
+        '--iidfile', imageIDFilePath,
+        '--attest', `type=provenance,mode=min,inline-only=true,builder-id=https://github.com/docker/build-push-action/actions/runs/123456789/attempts/1`,
+        '--metadata-file', metadataJson,
+        'https://github.com/docker/build-push-action.git?ref=refs/heads/master'
+      ],
+      new Map<string, string>([
+        ['BUILDX_SEND_GIT_QUERY_AS_INPUT', 'true']
+      ])
+    ],
+    [
+      38,
+      '0.28.0',
+      new Map<string, string>([
+        ['load', 'false'],
+        ['no-cache', 'false'],
+        ['push', 'false'],
+        ['pull', 'false'],
+      ]),
+      [
+        'build',
+        '--iidfile', imageIDFilePath,
+        '--attest', `type=provenance,mode=min,inline-only=true,builder-id=https://github.com/docker/build-push-action/actions/runs/123456789/attempts/1`,
+        '--metadata-file', metadataJson,
+        'https://github.com/docker/build-push-action.git#refs/heads/master'
+      ],
+      new Map<string, string>([
+        ['BUILDX_SEND_GIT_QUERY_AS_INPUT', 'true']
+      ])
+    ],
   ])(
-    '[%d] given %p with %p as inputs, returns %p',
+    '[%d] given %o with %o as inputs, returns %o',
     async (num: number, buildxVersion: string, inputs: Map<string, string>, expected: Array<string>, envs: Map<string, string> | undefined) => {
       if (envs) {
         envs.forEach((value: string, name: string) => {
@@ -869,9 +1004,10 @@ ANOTHER_SECRET=ANOTHER_SECRET_ENV`]
         setInput(name, value);
       });
       const toolkit = new Toolkit();
-      jest.spyOn(Buildx.prototype, 'version').mockImplementation(async (): Promise<string> => {
+      vi.spyOn(Buildx.prototype, 'version').mockImplementation(async (): Promise<string> => {
         return buildxVersion;
       });
+      const context = await loadContextModule();
       const inp = await context.getInputs();
       const res = await context.getArgs(inp, toolkit);
       expect(res).toEqual(expected);
@@ -886,4 +1022,9 @@ function getInputName(name: string): string {
 
 function setInput(name: string, value: string): void {
   process.env[getInputName(name)] = value;
+}
+
+async function loadContextModule(): Promise<typeof import('../src/context.js')> {
+  vi.resetModules();
+  return await import('../src/context.js');
 }

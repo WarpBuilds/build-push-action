@@ -1,25 +1,26 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as stateHelper from './state-helper';
 import * as core from '@actions/core';
 import * as actionsToolkit from '@docker/actions-toolkit';
 
-import {Buildx} from '@docker/actions-toolkit/lib/buildx/buildx';
-import {History as BuildxHistory} from '@docker/actions-toolkit/lib/buildx/history';
-import {Context} from '@docker/actions-toolkit/lib/context';
-import {Docker} from '@docker/actions-toolkit/lib/docker/docker';
-import {Exec} from '@docker/actions-toolkit/lib/exec';
-import {GitHub} from '@docker/actions-toolkit/lib/github';
-import {Toolkit} from '@docker/actions-toolkit/lib/toolkit';
-import {Util} from '@docker/actions-toolkit/lib/util';
+import {Buildx} from '@docker/actions-toolkit/lib/buildx/buildx.js';
+import {History as BuildxHistory} from '@docker/actions-toolkit/lib/buildx/history.js';
+import {Context} from '@docker/actions-toolkit/lib/context.js';
+import {Docker} from '@docker/actions-toolkit/lib/docker/docker.js';
+import {Exec} from '@docker/actions-toolkit/lib/exec.js';
+import {GitHub} from '@docker/actions-toolkit/lib/github/github.js';
+import {GitHubArtifact} from '@docker/actions-toolkit/lib/github/artifact.js';
+import {GitHubSummary} from '@docker/actions-toolkit/lib/github/summary.js';
+import {Toolkit} from '@docker/actions-toolkit/lib/toolkit.js';
+import {Util} from '@docker/actions-toolkit/lib/util.js';
 
-import {BuilderInfo} from '@docker/actions-toolkit/lib/types/buildx/builder';
-import {ConfigFile} from '@docker/actions-toolkit/lib/types/docker/docker';
-import {UploadArtifactResponse} from '@docker/actions-toolkit/lib/types/github';
+import {BuilderInfo} from '@docker/actions-toolkit/lib/types/buildx/builder.js';
+import {ConfigFile} from '@docker/actions-toolkit/lib/types/docker/docker.js';
+import {UploadResponse as UploadArtifactResponse} from '@docker/actions-toolkit/lib/types/github/artifact.js';
 
-import {WarpBuildRemoteBuilders} from './warpbuild';
-
-import * as context from './context';
+import * as context from './context.js';
+import * as stateHelper from './state-helper.js';
+import {WarpBuildRemoteBuilders} from './warpbuild.js';
 
 let remoteBuilders: WarpBuildRemoteBuilders;
 
@@ -190,8 +191,8 @@ actionsToolkit.run(
         core.info(`Build summary skipped for ${inputs.call} subrequest`);
       } else if (GitHub.isGHES) {
         core.info('Build summary is not yet supported on GHES');
-      } else if (!(await toolkit.buildx.versionSatisfies('>=0.13.0'))) {
-        core.info('Build summary requires Buildx >= 0.13.0');
+      } else if (!(await toolkit.buildx.versionSatisfies('>=0.23.0'))) {
+        core.info('Build summary requires Buildx >= 0.23.0');
       } else if (!ref) {
         core.info('Build summary requires a build reference');
       } else {
@@ -221,21 +222,19 @@ actionsToolkit.run(
 
           const buildxHistory = new BuildxHistory();
           const exportRes = await buildxHistory.export({
-            refs: stateHelper.buildRef ? [stateHelper.buildRef] : [],
-            useContainer: buildExportLegacy()
+            refs: stateHelper.buildRef ? [stateHelper.buildRef] : []
           });
           core.info(`Build record written to ${exportRes.dockerbuildFilename} (${Util.formatFileSize(exportRes.dockerbuildSize)})`);
 
           let uploadRes: UploadArtifactResponse | undefined;
           if (recordUploadEnabled) {
-            uploadRes = await GitHub.uploadArtifact({
+            uploadRes = await GitHubArtifact.upload({
               filename: exportRes.dockerbuildFilename,
-              mimeType: 'application/gzip',
               retentionDays: recordRetentionDays
             });
           }
 
-          await GitHub.writeBuildSummary({
+          await GitHubSummary.writeBuildSummary({
             exportRes: exportRes,
             uploadRes: uploadRes,
             inputs: stateHelper.summaryInputs,
@@ -251,7 +250,7 @@ actionsToolkit.run(
       await core.group(`Removing temp folder ${stateHelper.tmpDir}`, async () => {
         try {
           fs.rmSync(stateHelper.tmpDir, {recursive: true});
-        } catch (e) {
+        } catch {
           core.warning(`Failed to remove temp folder ${stateHelper.tmpDir}`);
         }
       });
@@ -302,14 +301,6 @@ function buildChecksAnnotationsEnabled(): boolean {
 function buildSummaryEnabled(): boolean {
   // WarpBuild remote builders don't support build summary
   return false;
-
-  // if (process.env.DOCKER_BUILD_NO_SUMMARY) {
-  //   core.warning('DOCKER_BUILD_NO_SUMMARY is deprecated. Set DOCKER_BUILD_SUMMARY to false instead.');
-  //   return !Util.parseBool(process.env.DOCKER_BUILD_NO_SUMMARY);
-  // } else if (process.env.DOCKER_BUILD_SUMMARY) {
-  //   return Util.parseBool(process.env.DOCKER_BUILD_SUMMARY);
-  // }
-  // return true;
 }
 
 function buildRecordUploadEnabled(): boolean {
@@ -320,13 +311,7 @@ function buildRecordUploadEnabled(): boolean {
 }
 
 function buildRecordRetentionDays(): number | undefined {
-  let val: string | undefined;
-  if (process.env.DOCKER_BUILD_EXPORT_RETENTION_DAYS) {
-    core.warning('DOCKER_BUILD_EXPORT_RETENTION_DAYS is deprecated. Use DOCKER_BUILD_RECORD_RETENTION_DAYS instead.');
-    val = process.env.DOCKER_BUILD_EXPORT_RETENTION_DAYS;
-  } else if (process.env.DOCKER_BUILD_RECORD_RETENTION_DAYS) {
-    val = process.env.DOCKER_BUILD_RECORD_RETENTION_DAYS;
-  }
+  const val = process.env.DOCKER_BUILD_RECORD_RETENTION_DAYS;
   if (val) {
     const res = parseInt(val);
     if (isNaN(res)) {
@@ -334,11 +319,4 @@ function buildRecordRetentionDays(): number | undefined {
     }
     return res;
   }
-}
-
-function buildExportLegacy(): boolean {
-  if (process.env.DOCKER_BUILD_EXPORT_LEGACY) {
-    return Util.parseBool(process.env.DOCKER_BUILD_EXPORT_LEGACY);
-  }
-  return false;
 }

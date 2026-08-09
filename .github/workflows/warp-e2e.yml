@@ -1,0 +1,82 @@
+name: warp-e2e
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build on a WarpBuild remote builder
+    runs-on: warp-ubuntu-latest-x64-4x
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build
+        id: build
+        uses: ./
+        with:
+          context: __tests__
+          file: __tests__/warp-e2e.Dockerfile
+          build-args: |
+            MARKER=warp-e2e
+          labels: |
+            com.warpbuild.e2e=true
+          profile-name: super-fast-builder
+          load: true
+
+      - name: Assert the build ran on a remote builder, not a local one
+        shell: bash
+        run: |
+          docker buildx inspect | tee /tmp/builder.txt
+          grep -qiE '^name:[[:space:]]+builder-' /tmp/builder.txt \
+            || { echo "current builder is not the one this action created"; exit 1; }
+          grep -qiE '^driver:[[:space:]]+remote' /tmp/builder.txt \
+            || { echo "expected the remote driver; the build did not use WarpBuild"; exit 1; }
+          grep -qE 'tcp://' /tmp/builder.txt \
+            || { echo "expected a tcp:// endpoint on the builder node"; exit 1; }
+
+      # Builder profiles cache layers automatically, so an identical rebuild
+      # must reuse them and produce the same digest.
+      - name: Rebuild the same image
+        id: rebuild
+        uses: ./
+        with:
+          context: __tests__
+          file: __tests__/warp-e2e.Dockerfile
+          build-args: |
+            MARKER=warp-e2e
+          labels: |
+            com.warpbuild.e2e=true
+          profile-name: super-fast-builder
+          load: true
+
+      - name: Assert layer reuse produced an identical image
+        shell: bash
+        env:
+          FIRST: ${{ steps.build.outputs.imageid }}
+          SECOND: ${{ steps.rebuild.outputs.imageid }}
+          FIRST_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "imageid first:  $FIRST"
+          echo "imageid second: $SECOND"
+          echo "digest:         $FIRST_DIGEST"
+          if [ -z "$FIRST" ]; then
+            echo "the action produced no imageid output"
+            exit 1
+          fi
+          if [ "$FIRST" != "$SECOND" ]; then
+            echo "identical rebuild produced a different image; layers were not reused"
+            exit 1
+          fi

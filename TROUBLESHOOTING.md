@@ -1,8 +1,6 @@
 # Troubleshooting
 
 * [Cannot push to a registry](#cannot-push-to-a-registry)
-  * [BuildKit container logs](#buildkit-container-logs)
-  * [With containerd](#with-containerd)
 * [`repository name must be lowercase`](#repository-name-must-be-lowercase)
 
 ## Cannot push to a registry
@@ -20,8 +18,6 @@ These issues are not directly related to this action but are rather linked to
 [containerd](https://github.com/containerd/containerd) or the registry on which
 you're pushing your image. The quality of error message depends on the registry
 and are usually not very informative.
-
-### BuildKit container logs
 
 To help you solve this, you have to [enable debugging in the setup-buildx](https://github.com/docker/setup-buildx-action#buildkit-container-logs)
 action step and attach BuildKit container logs to your issue.
@@ -100,7 +96,7 @@ to generate sanitized tags:
 ```yaml
 - name: Docker meta
   id: meta
-  uses: docker/metadata-action@v4
+  uses: docker/metadata-action@v6
   with:
     images: ghcr.io/${{ github.repository }}
     tags: latest
@@ -108,7 +104,6 @@ to generate sanitized tags:
 - name: Build and push
   uses: Warpbuilds/build-push-action@v6
   with:
-    context: .
     push: true
     profile-name: super-fast-builder
     tags: ${{ steps.meta.outputs.tags }}
@@ -118,7 +113,7 @@ Or a dedicated step to sanitize the slug:
 
 ```yaml
 - name: Sanitize repo slug
-  uses: actions/github-script@v6
+  uses: actions/github-script@v8
   id: repo_slug
   with:
     result-encoding: string
@@ -127,7 +122,6 @@ Or a dedicated step to sanitize the slug:
 - name: Build and push
   uses: Warpbuilds/build-push-action@v6
   with:
-    context: .
     push: true
     profile-name: super-fast-builder
     tags: ${{ steps.repo_slug.outputs.result }}:latest
