@@ -1,0 +1,40 @@
+name: WarpBuild Docker Configure Action with profile multiplexing
+
+on:
+  push:
+    branches:
+      - main
+      - profile-multiplexing
+  workflow_dispatch:
+
+jobs:
+  test-multiplexing:
+    name: Debug Run ${{ matrix.run_number }}
+    runs-on: warp-ubuntu-latest-x64-8x
+    strategy:
+      matrix:
+        run_number: [1,2,3]
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Pick builder profile from pool
+        id: pool
+        shell: bash
+        run: |
+          POOL=(multiplex-1 multiplex-2 multiplex-3)
+          KEY="${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index }}"
+          HASH=$(printf "%s" "$KEY" | md5sum | cut -c1-8)
+          IDX=$(( 0x$HASH % ${#POOL[@]} ))
+          echo "profile=${POOL[$IDX]}" >> "$GITHUB_OUTPUT"
+          echo "Routing to ${POOL[$IDX]} (key=$KEY, hash=$HASH, idx=$IDX)"
+          
+      - uses: WarpBuilds/build-push-action@v6
+        with:
+          profile-name: ${{ steps.pool.outputs.profile }}
+          context: .
+          file: __tests__/Dockerfile
+          tags: test-image-run-${{ matrix.run_number }}
+          push: false
+          platforms: linux/amd64
