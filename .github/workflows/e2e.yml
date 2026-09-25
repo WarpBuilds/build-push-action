@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/.e2e-run.yml
     permissions:
       contents: read
-      id-token: write # to get AWS credentials
+      id-token: write # to get Docker Hub and AWS credentials
       packages: write # to push image to GHCR
     strategy:
       fail-fast: false
@@ -105,10 +105,10 @@ jobs:
     secrets:
       # Pass only the registry-specific secrets needed by each matrix entry.
       # GHCR uses the called workflow's GITHUB_TOKEN fallback.
-      # AWS ECR uses OIDC to get credentials.
+      # Docker Hub and AWS ECR use OIDC to get credentials.
       registry_username: >-
         ${{
-          matrix.provider == 'dockerhub' && vars.DOCKERPUBLICBOT_USERNAME ||
+          matrix.provider == 'dockerhub' && 'dockereng' ||
           matrix.provider == 'gitlab' && secrets.GITLAB_USERNAME ||
           matrix.provider == 'gar' && secrets.GAR_USERNAME ||
           matrix.provider == 'acr' && secrets.AZURE_CLIENT_ID ||
@@ -118,7 +118,6 @@ jobs:
         }}
       registry_password: >-
         ${{
-          matrix.provider == 'dockerhub' && secrets.DOCKERPUBLICBOT_WRITE_PAT ||
           matrix.provider == 'gitlab' && secrets.GITLAB_TOKEN ||
           matrix.provider == 'gar' && secrets.GAR_JSON_KEY ||
           matrix.provider == 'acr' && secrets.AZURE_CLIENT_SECRET ||
